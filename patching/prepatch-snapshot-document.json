@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "2.2",
+  "description": "Pre-install hook for AWS-RunPatchBaselineWithHooks: snapshots every EBS volume attached to the instance before patching.",
+  "mainSteps": [
+    {
+      "action": "aws:runShellScript",
+      "name": "CreatePrePatchSnapshots",
+      "precondition": {
+        "StringEquals": ["platformType", "Linux"]
+      },
+      "inputs": {
+        "timeoutSeconds": "600",
+        "runCommand": [
+          "#!/bin/bash",
+          "set -euo pipefail",
+          "TOKEN=$(curl -sf -X PUT \"http://169.254.169.254/latest/api/token\" -H \"X-aws-ec2-metadata-token-ttl-seconds: 300\")",
+          "INSTANCE_ID=$(curl -sf -H \"X-aws-ec2-metadata-token: $TOKEN\" http://169.254.169.254/latest/meta-data/instance-id)",
+          "REGION=$(curl -sf -H \"X-aws-ec2-metadata-token: $TOKEN\" http://169.254.169.254/latest/meta-data/placement/region)",
+          "if [ -z \"$INSTANCE_ID\" ] || [ -z \"$REGION\" ]; then echo \"ERROR: Could not retrieve instance ID or region from metadata service.\"; exit 1; fi",
+          "INSTANCE_NAME=$(aws ec2 describe-tags --region \"$REGION\" --filters \"Name=resource-id,Values=$INSTANCE_ID\" \"Name=key,Values=Name\" --query \"Tags[0].Value\" --output text)",
+          "if [ -z \"$INSTANCE_NAME\" ] || [ \"$INSTANCE_NAME\" = \"None\" ]; then INSTANCE_NAME=\"$INSTANCE_ID\"; fi",
+          "DATE=$(date +%Y-%m-%d)",
+          "echo \"Creating pre-patch snapshots for $INSTANCE_NAME ($INSTANCE_ID)...\"",
+          "SNAPSHOT_IDS=$(aws ec2 create-snapshots --region \"$REGION\" --instance-specification \"InstanceId=$INSTANCE_ID,ExcludeBootVolume=false\" --description \"Pre-patch snapshot of $INSTANCE_NAME ($INSTANCE_ID) - $DATE\" --tag-specifications \"ResourceType=snapshot,Tags=[{Key=Name,Value=${INSTANCE_NAME}-prepatch-${DATE}},{Key=Purpose,Value=Patching},{Key=Retention,Value=30}]\" --query \"Snapshots[].SnapshotId\" --output text)",
+          "if [ -z \"$SNAPSHOT_IDS\" ] || [ \"$SNAPSHOT_IDS\" = \"None\" ]; then echo \"ERROR: No snapshots created for $INSTANCE_ID.\"; exit 1; fi",
+          "echo \"Created snapshots: $SNAPSHOT_IDS\"",
+          "echo \"All snapshot requests submitted successfully.\""
+        ]
+      }
+    }
+  ]
+}
