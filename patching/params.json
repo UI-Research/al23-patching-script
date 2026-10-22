@@ -1,32 +1,5 @@
 {
-  "commands": [
-    "#!/bin/bash",
-    "set -euo pipefail",
-    "TOKEN=$(curl -s -X PUT \"http://169.254.169.254/latest/api/token\" -H \"X-aws-ec2-metadata-token-ttl-seconds: 300\")",
-    "INSTANCE_ID=$(curl -s -H \"X-aws-ec2-metadata-token: $TOKEN\" http://169.254.169.254/latest/meta-data/instance-id)",
-    "if [ -z \"$INSTANCE_ID\" ]; then echo \"ERROR: Could not retrieve instance ID from metadata service.\"; exit 1; fi",
-    "INSTANCE_NAME=$(aws ec2 describe-tags --filters \"Name=resource-id,Values=$INSTANCE_ID\" \"Name=key,Values=Name\" --query \"Tags[0].Value\" --output text)",
-    "DATE=$(date +%Y-%m-%d)",
-    "echo \"Creating pre-patch snapshots for $INSTANCE_NAME ($INSTANCE_ID)...\"",
-    "VOLUMES=$(aws ec2 describe-instances --instance-ids \"$INSTANCE_ID\" --query \"Reservations[0].Instances[0].BlockDeviceMappings[*].Ebs.VolumeId\" --output text)",
-    "for VOLUME_ID in $VOLUMES; do",
-    "  echo \"Creating snapshot for volume $VOLUME_ID...\"",
-    "  SNAPSHOT_ID=$(aws ec2 create-snapshot --volume-id \"$VOLUME_ID\" --description \"Pre-patch snapshot of $INSTANCE_NAME ($INSTANCE_ID) - $DATE\" --tag-specifications \"ResourceType=snapshot,Tags=[{Key=Name,Value=${INSTANCE_NAME}-prepatch-${DATE}},{Key=Purpose,Value=Patching},{Key=Retention,Value=30}]\" --query \"SnapshotId\" --output text)",
-    "  echo \"Created snapshot: $SNAPSHOT_ID\"",
-    "done",
-    "echo \"All snapshot requests submitted successfully.\"",
-    "sleep 10",
-    "echo \"---- Patching Instances in Process----\"",
-    "dnf clean all",
-    "dnf --releasever=latest upgrade -y",
-    "running_kernel=$(uname -r)",
-    "latest_kernel=$(rpm -q kernel --last | head -1 | awk '{print $1}' | sed 's/kernel-//')",
-    "if [[ \"$running_kernel\" != \"$latest_kernel\" ]]; then",
-    "    echo \"Kernel updated from ${running_kernel} to ${latest_kernel}. Rebooting...\"",
-    "    reboot",
-    "else",
-    "    echo \"No reboot required.\"",
-    "fi",
-    "echo \"---- Patching Instances Done ----\""
-  ]
+  "Operation": ["Install"],
+  "RebootOption": ["RebootIfNeeded"],
+  "PreInstallHookDocName": ["PrePatch-Snapshot"]
 }
